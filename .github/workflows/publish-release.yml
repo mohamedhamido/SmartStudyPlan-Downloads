@@ -1,0 +1,42 @@
+name: Publish release assets
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged files
+        uses: actions/checkout@v4
+
+      - name: Rebuild binaries and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p downloads
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+
+          def restore(prefix, destination):
+              chunks = sorted(Path('.release-assets').glob(f'{prefix}-*.txt'))
+              encoded = ''.join(chunk.read_text(encoding='ascii').strip() for chunk in chunks)
+              Path(destination).write_bytes(base64.b64decode(encoded))
+
+          restore('apk', 'downloads/smart-study-plan-2.0.1.apk')
+          restore('exe', 'downloads/SmartStudyPlan-2.0.1-Setup.exe')
+          PY
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" downloads/smart-study-plan-2.0.1.apk downloads/SmartStudyPlan-2.0.1-Setup.exe --clobber
+            gh release edit "$TAG" --title "تطبيق الخطة الذكية 2.0.1" --notes-file RELEASE_NOTES.md --draft=false
+          else
+            gh release create "$TAG" downloads/smart-study-plan-2.0.1.apk downloads/SmartStudyPlan-2.0.1-Setup.exe --title "تطبيق الخطة الذكية 2.0.1" --notes-file RELEASE_NOTES.md
+          fi
